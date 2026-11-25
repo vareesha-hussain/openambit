@@ -20,6 +20,8 @@ the light is plugged in. If not, install it once from <https://www.wch-ic.com/do
   frames. It does hold its last frame while it keeps USB power, so **Keep lit on quit** leaves it on after you
   exit. **Start with Windows** (per-user, no admin) restores your saved mode at login.
 - Settings persist in `~/.openambit.json`.
+- Known issue: on at least one setup, screen sync shows plain white on the light even though the app computes the
+  correct edge colours. Effects and music sync are unaffected. Under investigation.
 
 ## Run from source
     pip install -r requirements.txt

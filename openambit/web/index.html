@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8"><title>OpenAmbit</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;--bg:#14161a;--card:#1d2026;--fg:#e8eaed;--mut:#8a8f98;--acc:#ff6a3d}
+body{margin:0;padding:20px;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;max-width:760px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 14px}
+.card{background:var(--card);border-radius:10px;padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
+.row label{width:120px;color:var(--mut)}
+input[type=range]{flex:1;min-width:140px;accent-color:var(--acc)}
+button,select{background:#2a2e36;color:var(--fg);border:0;border-radius:6px;padding:7px 12px;font:inherit}
+button.on{background:var(--acc);color:#111}
+#strip{display:flex;gap:1px;height:26px}#strip i{flex:1;border-radius:2px;background:#000}
+.cols input{width:38px;height:30px;border:0;background:none;padding:0}
+.err{color:#ff6b6b}
+</style>
+<h1>OpenAmbit</h1>
+<div class="card"><div id="strip"></div></div>
+<div class="card">
+  <div class="row"><label>Power</label><button id="pw"></button></div>
+  <div class="row"><label>Brightness</label><input type="range" id="br" min="0" max="1" step="0.01"></div>
+  <div class="row"><label>Gamma</label><input type="range" id="gm" min="0.5" max="3" step="0.05"></div>
+  <div class="row"><label>FPS</label><input type="range" id="fps" min="5" max="60" step="1"></div>
+  <div class="row" id="modes"></div>
+  <div class="row"><label>Light</label><span id="conn"></span></div>
+  <div class="row"><label>Start with Windows</label><input type="checkbox" id="auto"> <span id="automsg" class="err"></span></div>
+  <div class="row"><label>Keep lit on quit</label><input type="checkbox" id="keep"> <span style="color:var(--mut)">light holds its last colour after quitting (until unplugged)</span></div>
+  <div class="row"><button id="quit">Quit OpenAmbit</button></div>
+</div>
+<div class="card" id="p-effect"><b>Effect</b>
+  <div class="row"><label>Type</label><select id="ef"></select></div>
+  <div class="row"><label>Colors</label><span class="cols" id="ecols"></span><button id="addc">+</button><button id="delc">−</button></div>
+  <div class="row"><label>Speed</label><input type="range" id="esp" min="0.02" max="1.5" step="0.01"></div>
+  <div class="row"><label>Scale</label><input type="range" id="esc" min="0.2" max="4" step="0.05"></div>
+</div>
+<div class="card" id="p-screen"><b>Screen sync</b>
+  <div class="row"><label>Edge depth</label><input type="range" id="sd" min="0.02" max="0.5" step="0.01"></div>
+  <div class="row"><label>Smoothing</label><input type="range" id="ss" min="0" max="0.95" step="0.01"></div>
+  <div class="row"><label>Saturation</label><input type="range" id="sa" min="0" max="3" step="0.05"></div>
+  <div class="row"><label>Black level</label><input type="range" id="sb" min="0" max="80" step="1"></div>
+  <div class="row"><label>Monitor #</label><input type="number" id="sm" min="1" max="8" style="width:60px"></div>
+</div>
+<div class="card" id="p-music"><b>Music sync</b> <span id="aerr" class="err"></span>
+  <div class="row"><label>Style</label><select id="ms"><option>spectrum</option><option>pulse</option><option>level</option></select></div>
+  <div class="row"><label>Sensitivity</label><input type="range" id="mn" min="0.2" max="4" step="0.05"></div>
+  <div class="row"><label>Colors</label><span class="cols" id="mcols"></span></div>
+</div>
+<div class="card"><b>LED layout</b> (counts per edge, strip order: right↑ top← left↓ bottom→)
+  <div class="row" id="lay"></div>
+  <div class="row"><label>Reverse</label><input type="checkbox" id="lrev"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);let S=null,busy=0;
+const post=p=>{busy=Date.now();fetch('/api/update',{method:'POST',body:JSON.stringify(p)})};
+const bind=(id,path,num=true)=>{$(id).addEventListener('input',e=>{let v=e.target.type=='checkbox'?e.target.checked:(num?+e.target.value:e.target.value);let o={},c=o;path.slice(0,-1).forEach(k=>c=c[k]={});c[path.at(-1)]=v;post(o)})};
+bind('br',['brightness']);bind('gm',['gamma']);bind('fps',['fps']);
+bind('esp',['effect','speed']);bind('esc',['effect','scale']);bind('sd',['screen','depth']);bind('ss',['screen','smoothing']);
+bind('sa',['screen','saturation']);bind('sb',['screen','black_level']);bind('sm',['screen','monitor']);
+bind('mn',['music','sensitivity']);bind('ms',['music','style'],false);bind('ef',['effect','name'],false);bind('lrev',['layout','reverse']);bind('keep',['keep_on_quit']);
+$('quit').onclick=async()=>{await fetch('/api/quit',{method:'POST'});document.body.innerHTML='<p style="padding:20px">OpenAmbit has quit. You can close this tab.</p>'};
+$('auto').onchange=async e=>{const r=await (await fetch('/api/autostart',{method:'POST',body:JSON.stringify({enabled:e.target.checked})})).json();$('automsg').textContent=r.ok?'':r.message;if(!r.ok)e.target.checked=false};
+$('pw').onclick=()=>post({power:!S.power});
+['effect','screen','music'].forEach(m=>{const b=document.createElement('button');b.textContent=m;b.id='m-'+m;b.onclick=()=>post({mode:m});$('modes').append(b)});
+['right','top','left','bottom'].forEach(k=>{const l=document.createElement('label');l.textContent=k;l.style.width='auto';const i=document.createElement('input');i.type='number';i.id='l-'+k;i.style.width='60px';i.oninput=()=>post({layout:{[k]:+i.value}});$('lay').append(l,i)});
+function colorInputs(el,key,sub){el.innerHTML='';S[sub].colors.forEach((c,i)=>{const x=document.createElement('input');x.type='color';x.value=c;x.oninput=()=>{const cs=[...S[sub].colors];cs[i]=x.value;post({[sub]:{colors:cs}});S[sub].colors=cs};el.append(x)})}
+$('addc').onclick=()=>{const cs=[...S.effect.colors,'#ffffff'];S.effect.colors=cs;post({effect:{colors:cs}})};
+$('delc').onclick=()=>{if(S.effect.colors.length>1){const cs=S.effect.colors.slice(0,-1);S.effect.colors=cs;post({effect:{colors:cs}})}};
+let built=false;
+function fill(){const e=document.activeElement;
+ $('pw').textContent=S.power?'On':'Off';$('pw').className=S.power?'on':'';
+ ['effect','screen','music'].forEach(m=>$('m-'+m).className=S.mode==m?'on':'');
+ const set=(id,v)=>{if(e!==$(id))$(id).value=v};
+ set('br',S.brightness);set('gm',S.gamma);set('fps',S.fps);set('esp',S.effect.speed);set('esc',S.effect.scale);
+ set('sd',S.screen.depth);set('ss',S.screen.smoothing);set('sa',S.screen.saturation);set('sb',S.screen.black_level);set('sm',S.screen.monitor);
+ $('keep').checked=!!S.keep_on_quit;set('mn',S.music.sensitivity);set('ms',S.music.style);set('ef',S.effect.name);$('lrev').checked=S.layout.reverse;
+ ['right','top','left','bottom'].forEach(k=>set('l-'+k,S.layout[k]));
+ if(!e||e.type!='color'){colorInputs($('ecols'),'colors','effect');colorInputs($('mcols'),'colors','music')}
+ ['effect','screen','music'].forEach(m=>$('p-'+m).style.opacity=S.mode==m?1:.45)}
+async function tick(){try{const r=await (await fetch('/api/state')).json();
+ if(!built){$('ef').innerHTML=r.effects.map(x=>`<option>${x}</option>`).join('');built=true}
+ if(Date.now()-busy>600){S=r.state;fill()}else if(!S)S=r.state;
+ $('aerr').textContent=r.audio_error||'';
+ $('conn').textContent=r.connected?'connected':'not connected - waiting (plug it in; saved mode resumes automatically)';
+ $('conn').className=r.connected?'':'err';if(document.activeElement!==$('auto'))$('auto').checked=r.autostart;
+ const st=$('strip');if(st.children.length!=r.preview.length){st.innerHTML='<i></i>'.repeat(r.preview.length)}
+ r.preview.forEach((c,i)=>st.children[i].style.background=`rgb(${c})`)}catch(_){}
+ setTimeout(tick,150)}
+tick();
+</script>
